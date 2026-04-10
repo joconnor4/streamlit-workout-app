@@ -159,35 +159,34 @@ def fetch_records(conn):
             a.AthleteName,
             w.WorkoutName,
             w.WorkoutType,
-            wr.StartTime,
             wr.Duration,
             wr.Pace,
             wr.AverageHR
         FROM WorkoutRecords wr
         JOIN Athletes a ON wr.AthleteID  = a.AthleteID
         JOIN Workouts w ON wr.WorkoutID  = w.WorkoutID
-        ORDER BY wr.StartTime DESC;
+        ORDER BY w.WorkoutType, a.AthleteName;
     """)
     results = cur.fetchall()
     cur.close()
     return results
 
-def insert_record(conn, athlete_id, workout_id, start_time, duration, pace, avg_hr):
+def insert_record(conn, athlete_id, workout_id, duration, pace, avg_hr):
     cur = conn.cursor()
     cur.execute("""
-        INSERT INTO WorkoutRecords (AthleteID, WorkoutID, StartTime, Duration, Pace, AverageHR)
-        VALUES (%s, %s, %s, %s, %s, %s);
-    """, (athlete_id, workout_id, start_time, duration, pace, avg_hr))
+        INSERT INTO WorkoutRecords (AthleteID, WorkoutID, Duration, Pace, AverageHR)
+        VALUES (%s, %s, %s, %s, %s);
+    """, (athlete_id, workout_id, duration, pace, avg_hr))
     cur.close()
     conn.commit()
 
-def update_record(conn, athlete_id, workout_id, start_time, duration, pace, avg_hr):
+def update_record(conn, athlete_id, workout_id, duration, pace, avg_hr):
     cur = conn.cursor()
     cur.execute("""
         UPDATE WorkoutRecords
-        SET StartTime=%s, Duration=%s, Pace=%s, AverageHR=%s
+        SET Duration=%s, Pace=%s, AverageHR=%s
         WHERE AthleteID=%s AND WorkoutID=%s;
-    """, (start_time, duration, pace, avg_hr, athlete_id, workout_id))
+    """, (duration, pace, avg_hr, athlete_id, workout_id))
     cur.close()
     conn.commit()
 
@@ -201,15 +200,8 @@ def delete_record(conn, athlete_id, workout_id):
     conn.commit()
 
 # ── Validation ────────────────────────────────────────────────────────────────
-def validate_record(start_time_str, duration, pace, avg_hr_str):
+def validate_record(duration, pace, avg_hr_str):
     errors = []
-    if not start_time_str.strip():
-        errors.append("Start Time is required.")
-    else:
-        try:
-            datetime.strptime(start_time_str.strip(), "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            errors.append("Start Time must be in YYYY-MM-DD HH:MM:SS format.")
     if not duration.strip():
         errors.append("Duration is required.")
     if not pace.strip():
@@ -233,16 +225,17 @@ for key, default in {
     "selected_type":         None,
     "selected_workout_id":   None,
     "selected_workout_name": "",
-    "step":                  1,        # 1 = pick athlete+type, 2 = log metrics
+    "step":                  1,
     # Edit state
     "edit_athlete_id":       None,
     "edit_workout_id":       None,
-    "edit_start_time":       "",
     "edit_duration":         "",
     "edit_pace":             "",
     "edit_avg_hr":           "",
     # Delete confirmation
     "confirm_delete_key":    None,
+    # Filter
+    "filter_type":           "All",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -317,14 +310,11 @@ if st.session_state.step == 2 and st.session_state.selected_type:
 
         col1, col2 = st.columns(2)
         with col1:
-            start_time_str = st.text_input(
-                "Start Time * (YYYY-MM-DD HH:MM:SS)",
-                placeholder=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            )
-            duration_str   = st.text_input("Duration *", placeholder="45:00")
+            duration_str = st.text_input("Duration *", placeholder="45:00")
         with col2:
-            pace_str       = st.text_input("Pace *", placeholder="8:30 /mi")
-            avg_hr_str     = st.text_input("Average Heart Rate * (bpm)", placeholder="155")
+            pace_str     = st.text_input("Pace *", placeholder="8:30 /mi")
+
+        avg_hr_str = st.text_input("Average Heart Rate * (bpm)", placeholder="155")
 
         save_col, back_col, _ = st.columns([1, 1, 4])
         with save_col:
@@ -340,7 +330,7 @@ if st.session_state.step == 2 and st.session_state.selected_type:
         if workout_choice == "— select workout —":
             st.error("Please select a workout.")
         else:
-            errors = validate_record(start_time_str, duration_str, pace_str, avg_hr_str)
+            errors = validate_record(duration_str, pace_str, avg_hr_str)
             if errors:
                 for e in errors:
                     st.error(e)
@@ -350,7 +340,6 @@ if st.session_state.step == 2 and st.session_state.selected_type:
                         conn,
                         st.session_state.selected_athlete_id,
                         workout_map[workout_choice],
-                        datetime.strptime(start_time_str.strip(), "%Y-%m-%d %H:%M:%S"),
                         duration_str.strip(),
                         pace_str.strip(),
                         int(avg_hr_str.strip()),
@@ -379,11 +368,11 @@ if st.session_state.edit_athlete_id is not None:
     with st.form("edit_record_form"):
         col1, col2 = st.columns(2)
         with col1:
-            e_start    = st.text_input("Start Time * (YYYY-MM-DD HH:MM:SS)", value=st.session_state.edit_start_time)
-            e_duration = st.text_input("Duration *",                          value=st.session_state.edit_duration)
+            e_duration = st.text_input("Duration *", value=st.session_state.edit_duration)
         with col2:
-            e_pace     = st.text_input("Pace *",                              value=st.session_state.edit_pace)
-            e_avg_hr   = st.text_input("Average Heart Rate * (bpm)",          value=st.session_state.edit_avg_hr)
+            e_pace     = st.text_input("Pace *",     value=st.session_state.edit_pace)
+
+        e_avg_hr = st.text_input("Average Heart Rate * (bpm)", value=st.session_state.edit_avg_hr)
 
         save_col, cancel_col, _ = st.columns([1, 1, 4])
         with save_col:
@@ -392,7 +381,7 @@ if st.session_state.edit_athlete_id is not None:
             edit_cancel = st.form_submit_button("✕ Cancel",        type="secondary", use_container_width=True)
 
     if edit_save:
-        errors = validate_record(e_start, e_duration, e_pace, e_avg_hr)
+        errors = validate_record(e_duration, e_pace, e_avg_hr)
         if errors:
             for e in errors:
                 st.error(e)
@@ -402,7 +391,6 @@ if st.session_state.edit_athlete_id is not None:
                     conn,
                     st.session_state.edit_athlete_id,
                     st.session_state.edit_workout_id,
-                    datetime.strptime(e_start.strip(), "%Y-%m-%d %H:%M:%S"),
                     e_duration.strip(),
                     e_pace.strip(),
                     int(e_avg_hr.strip()),
