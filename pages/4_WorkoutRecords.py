@@ -1,7 +1,6 @@
 import streamlit as st
 import psycopg2
 import psycopg2.extras
-from datetime import datetime
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Workout Records", page_icon="📋", layout="wide")
@@ -244,10 +243,10 @@ for key, default in {
 st.title("📋 Workout Records")
 conn = get_connection()
 
-athletes     = fetch_athletes(conn)
+athletes      = fetch_athletes(conn)
 workout_types = fetch_workout_types(conn)
 
-athlete_map  = {a["athletename"]: a["athleteid"] for a in athletes}
+athlete_map   = {a["athletename"]: a["athleteid"] for a in athletes}
 athlete_names = list(athlete_map.keys())
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -290,7 +289,7 @@ if next_btn:
 # ── STEP 2: Pick specific workout + log metrics ───────────────────────────────
 if st.session_state.step == 2 and st.session_state.selected_type:
     workouts_for_type = fetch_workouts_by_type(conn, st.session_state.selected_type)
-    workout_map  = {w["workoutname"]: w["workoutid"] for w in workouts_for_type}
+    workout_map   = {w["workoutname"]: w["workoutid"] for w in workouts_for_type}
     workout_names = list(workout_map.keys())
 
     st.markdown("---")
@@ -318,9 +317,9 @@ if st.session_state.step == 2 and st.session_state.selected_type:
 
         save_col, back_col, _ = st.columns([1, 1, 4])
         with save_col:
-            log_btn  = st.form_submit_button("💾 Log Workout", type="primary", use_container_width=True)
+            log_btn  = st.form_submit_button("💾 Log Workout", type="primary",    use_container_width=True)
         with back_col:
-            back_btn = st.form_submit_button("← Back",         type="secondary", use_container_width=True)
+            back_btn = st.form_submit_button("← Back",         type="secondary",  use_container_width=True)
 
     if back_btn:
         st.session_state.step = 1
@@ -417,15 +416,38 @@ records = fetch_records(conn)
 if not records:
     st.info("No workout records yet. Log your first session above.")
 else:
-    st.markdown(
-        f'<p class="meta-label">{len(records)} record{"s" if len(records) != 1 else ""} logged</p>',
-        unsafe_allow_html=True,
-    )
+    # ── Filter bar ────────────────────────────────────────────────────────────
+    all_types = sorted(set(r["workouttype"] for r in records if r["workouttype"]))
+    filter_options = ["All"] + all_types
+
+    filter_col, count_col = st.columns([2, 4])
+    with filter_col:
+        selected_filter = st.selectbox(
+            "Filter by Workout Type",
+            options=filter_options,
+            index=filter_options.index(st.session_state.filter_type)
+                  if st.session_state.filter_type in filter_options else 0,
+            key="filter_type_select",
+        )
+        st.session_state.filter_type = selected_filter
+
+    filtered = records if selected_filter == "All" else [
+        r for r in records if r["workouttype"] == selected_filter
+    ]
+
+    with count_col:
+        st.markdown(
+            f'<p class="meta-label" style="margin-top:2rem;">'
+            f'{len(filtered)} record{"s" if len(filtered) != 1 else ""}'
+            f'{f" · filtered from {len(records)}" if selected_filter != "All" else " total"}'
+            f'</p>',
+            unsafe_allow_html=True,
+        )
 
     # ── Header ────────────────────────────────────────────────────────────────
-    hc = st.columns([2.5, 2, 1.5, 2, 1.5, 1.5, 1, 1])
+    hc = st.columns([2.5, 2, 1.5, 1.5, 1.5, 1, 1])
     for label, col in zip(
-        ["Athlete", "Workout", "Type", "Start Time", "Duration", "Pace", "Avg HR", "Actions"],
+        ["Athlete", "Workout", "Type", "Duration", "Pace", "Avg HR", "Actions"],
         hc,
     ):
         col.markdown(f'<p class="meta-label">{label}</p>', unsafe_allow_html=True)
@@ -433,40 +455,34 @@ else:
     st.markdown('<hr style="margin:0.3rem 0 0.5rem 0;">', unsafe_allow_html=True)
 
     # ── Rows ──────────────────────────────────────────────────────────────────
-    for r in records:
-        aid      = r["athleteid"]
-        wid      = r["workoutid"]
-        row_key  = f"{aid}_{wid}"
+    for r in filtered:
+        aid     = r["athleteid"]
+        wid     = r["workoutid"]
+        row_key = f"{aid}_{wid}"
 
-        col = st.columns([2.5, 2, 1.5, 2, 1.5, 1.5, 1, 1])
-        col[0].markdown(f"<span style='font-weight:500;'>{r['athletename']}</span>",  unsafe_allow_html=True)
-        col[1].markdown(f"{r['workoutname']}",                                         unsafe_allow_html=True)
+        col = st.columns([2.5, 2, 1.5, 1.5, 1.5, 1, 1])
+        col[0].markdown(f"<span style='font-weight:500;'>{r['athletename']}</span>", unsafe_allow_html=True)
+        col[1].markdown(f"{r['workoutname']}",                                        unsafe_allow_html=True)
         col[2].markdown(
             f"<span class='type-badge'>{r['workouttype'] or '—'}</span>",
             unsafe_allow_html=True,
         )
-        col[3].markdown(
-            f"<span style='font-family:DM Mono,monospace;font-size:0.8rem;'>"
-            f"{r['starttime'].strftime('%Y-%m-%d %H:%M') if r['starttime'] else '—'}</span>",
-            unsafe_allow_html=True,
-        )
-        col[4].markdown(f"{r['duration'] or '—'}", unsafe_allow_html=True)
-        col[5].markdown(f"{r['pace'] or '—'}",     unsafe_allow_html=True)
-        col[6].markdown(
+        col[3].markdown(f"{r['duration'] or '—'}", unsafe_allow_html=True)
+        col[4].markdown(f"{r['pace'] or '—'}",     unsafe_allow_html=True)
+        col[5].markdown(
             f"<span style='font-family:DM Mono,monospace;'>{r['averagehr'] or '—'}</span>",
             unsafe_allow_html=True,
         )
 
-        with col[7]:
+        with col[6]:
             edit_del = st.columns(2)
             with edit_del[0]:
                 if st.button("✏️", key=f"edit_{row_key}", use_container_width=True, help="Edit record"):
-                    st.session_state.edit_athlete_id  = aid
-                    st.session_state.edit_workout_id  = wid
-                    st.session_state.edit_start_time  = r["starttime"].strftime("%Y-%m-%d %H:%M:%S") if r["starttime"] else ""
-                    st.session_state.edit_duration    = r["duration"]  or ""
-                    st.session_state.edit_pace        = r["pace"]      or ""
-                    st.session_state.edit_avg_hr      = str(r["averagehr"]) if r["averagehr"] else ""
+                    st.session_state.edit_athlete_id    = aid
+                    st.session_state.edit_workout_id    = wid
+                    st.session_state.edit_duration      = r["duration"]  or ""
+                    st.session_state.edit_pace          = r["pace"]      or ""
+                    st.session_state.edit_avg_hr        = str(r["averagehr"]) if r["averagehr"] else ""
                     st.session_state.confirm_delete_key = None
                     st.rerun()
             with edit_del[1]:
