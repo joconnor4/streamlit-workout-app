@@ -116,79 +116,88 @@ hr { border-color: #21262d !important; }
 """, unsafe_allow_html=True)
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
-@st.cache_resource
 def get_connection():
     if "db_conn" not in st.session_state or st.session_state.db_conn.closed:
         st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
     else:
         try:
-            # ping the connection to make sure it's still alive
             st.session_state.db_conn.cursor().execute("SELECT 1")
         except Exception:
             st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
     return st.session_state.db_conn
 
 def fetch_athletes(conn):
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT AthleteID, AthleteName FROM Athletes ORDER BY AthleteName;")
-        return cur.fetchall()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT AthleteID, AthleteName FROM Athletes ORDER BY AthleteName;")
+    results = cur.fetchall()
+    cur.close()
+    return results
 
 def fetch_workout_types(conn):
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("SELECT DISTINCT WorkoutType FROM Workouts WHERE WorkoutType IS NOT NULL ORDER BY WorkoutType;")
-        return [r["workouttype"] for r in cur.fetchall()]
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT DISTINCT WorkoutType FROM Workouts WHERE WorkoutType IS NOT NULL ORDER BY WorkoutType;")
+    results = [r["workouttype"] for r in cur.fetchall()]
+    cur.close()
+    return results
 
 def fetch_workouts_by_type(conn, wtype):
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute(
-            "SELECT WorkoutID, WorkoutName FROM Workouts WHERE WorkoutType=%s ORDER BY WorkoutName;",
-            (wtype,)
-        )
-        return cur.fetchall()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT WorkoutID, WorkoutName FROM Workouts WHERE WorkoutType=%s ORDER BY WorkoutName;",
+        (wtype,)
+    )
+    results = cur.fetchall()
+    cur.close()
+    return results
 
 def fetch_records(conn):
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""
-            SELECT
-                wr.AthleteID,
-                wr.WorkoutID,
-                a.AthleteName,
-                w.WorkoutName,
-                w.WorkoutType,
-                wr.StartTime,
-                wr.Duration,
-                wr.Pace,
-                wr.AverageHR
-            FROM WorkoutRecords wr
-            JOIN Athletes a ON wr.AthleteID  = a.AthleteID
-            JOIN Workouts w ON wr.WorkoutID  = w.WorkoutID
-            ORDER BY wr.StartTime DESC;
-        """)
-        return cur.fetchall()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT
+            wr.AthleteID,
+            wr.WorkoutID,
+            a.AthleteName,
+            w.WorkoutName,
+            w.WorkoutType,
+            wr.StartTime,
+            wr.Duration,
+            wr.Pace,
+            wr.AverageHR
+        FROM WorkoutRecords wr
+        JOIN Athletes a ON wr.AthleteID  = a.AthleteID
+        JOIN Workouts w ON wr.WorkoutID  = w.WorkoutID
+        ORDER BY wr.StartTime DESC;
+    """)
+    results = cur.fetchall()
+    cur.close()
+    return results
 
 def insert_record(conn, athlete_id, workout_id, start_time, duration, pace, avg_hr):
-    with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO WorkoutRecords (AthleteID, WorkoutID, StartTime, Duration, Pace, AverageHR)
-            VALUES (%s, %s, %s, %s, %s, %s);
-        """, (athlete_id, workout_id, start_time, duration, pace, avg_hr))
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO WorkoutRecords (AthleteID, WorkoutID, StartTime, Duration, Pace, AverageHR)
+        VALUES (%s, %s, %s, %s, %s, %s);
+    """, (athlete_id, workout_id, start_time, duration, pace, avg_hr))
+    cur.close()
     conn.commit()
 
 def update_record(conn, athlete_id, workout_id, start_time, duration, pace, avg_hr):
-    with conn.cursor() as cur:
-        cur.execute("""
-            UPDATE WorkoutRecords
-            SET StartTime=%s, Duration=%s, Pace=%s, AverageHR=%s
-            WHERE AthleteID=%s AND WorkoutID=%s;
-        """, (start_time, duration, pace, avg_hr, athlete_id, workout_id))
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE WorkoutRecords
+        SET StartTime=%s, Duration=%s, Pace=%s, AverageHR=%s
+        WHERE AthleteID=%s AND WorkoutID=%s;
+    """, (start_time, duration, pace, avg_hr, athlete_id, workout_id))
+    cur.close()
     conn.commit()
 
 def delete_record(conn, athlete_id, workout_id):
-    with conn.cursor() as cur:
-        cur.execute(
-            "DELETE FROM WorkoutRecords WHERE AthleteID=%s AND WorkoutID=%s;",
-            (athlete_id, workout_id)
-        )
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM WorkoutRecords WHERE AthleteID=%s AND WorkoutID=%s;",
+        (athlete_id, workout_id)
+    )
+    cur.close()
     conn.commit()
 
 # ── Validation ────────────────────────────────────────────────────────────────
