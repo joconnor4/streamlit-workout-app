@@ -119,7 +119,15 @@ hr { border-color: #21262d !important; }
 # ── DB helpers ────────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_connection():
-    return psycopg2.connect(st.secrets["DB_URL"])
+    if "db_conn" not in st.session_state or st.session_state.db_conn.closed:
+        st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
+    else:
+        try:
+            # ping the connection to make sure it's still alive
+            st.session_state.db_conn.cursor().execute("SELECT 1")
+        except Exception:
+            st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
+    return st.session_state.db_conn
 
 def fetch_coaches(conn):
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
