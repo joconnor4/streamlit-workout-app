@@ -98,46 +98,49 @@ hr { border-color: #21262d !important; }
 """, unsafe_allow_html=True)
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
-@st.cache_resource
 def get_connection():
     if "db_conn" not in st.session_state or st.session_state.db_conn.closed:
         st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
     else:
         try:
-            # ping the connection to make sure it's still alive
             st.session_state.db_conn.cursor().execute("SELECT 1")
         except Exception:
             st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
     return st.session_state.db_conn
 
 def fetch_workouts(conn):
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""
-            SELECT WorkoutID, WorkoutName, WorkoutType
-            FROM Workouts
-            ORDER BY WorkoutType, WorkoutName;
-        """)
-        return cur.fetchall()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT WorkoutID, WorkoutName, WorkoutType
+        FROM Workouts
+        ORDER BY WorkoutType, WorkoutName;
+    """)
+    results = cur.fetchall()
+    cur.close()
+    return results
 
 def insert_workout(conn, name, wtype):
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO Workouts (WorkoutName, WorkoutType) VALUES (%s, %s);",
-            (name, wtype)
-        )
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO Workouts (WorkoutName, WorkoutType) VALUES (%s, %s);",
+        (name, wtype)
+    )
+    cur.close()
     conn.commit()
 
 def update_workout(conn, workout_id, name, wtype):
-    with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE Workouts SET WorkoutName=%s, WorkoutType=%s WHERE WorkoutID=%s;",
-            (name, wtype, workout_id)
-        )
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE Workouts SET WorkoutName=%s, WorkoutType=%s WHERE WorkoutID=%s;",
+        (name, wtype, workout_id)
+    )
+    cur.close()
     conn.commit()
 
 def delete_workout(conn, workout_id):
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM Workouts WHERE WorkoutID=%s;", (workout_id,))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM Workouts WHERE WorkoutID=%s;", (workout_id,))
+    cur.close()
     conn.commit()
 
 # ── Validation ────────────────────────────────────────────────────────────────
