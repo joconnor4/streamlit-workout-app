@@ -117,46 +117,49 @@ hr { border-color: #21262d !important; }
 """, unsafe_allow_html=True)
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
-@st.cache_resource
 def get_connection():
     if "db_conn" not in st.session_state or st.session_state.db_conn.closed:
         st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
     else:
         try:
-            # ping the connection to make sure it's still alive
             st.session_state.db_conn.cursor().execute("SELECT 1")
         except Exception:
             st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
     return st.session_state.db_conn
 
 def fetch_coaches(conn):
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        cur.execute("""
-            SELECT CoachID, CoachName, Phone
-            FROM Coaches
-            ORDER BY SPLIT_PART(CoachName, ' ', 2), CoachName;
-        """)
-        return cur.fetchall()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT CoachID, CoachName, Phone
+        FROM Coaches
+        ORDER BY SPLIT_PART(CoachName, ' ', 2), CoachName;
+    """)
+    results = cur.fetchall()
+    cur.close()
+    return results
 
 def insert_coach(conn, name, phone):
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO Coaches (CoachName, Phone) VALUES (%s, %s);",
-            (name, phone)
-        )
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO Coaches (CoachName, Phone) VALUES (%s, %s);",
+        (name, phone)
+    )
+    cur.close()
     conn.commit()
 
 def update_coach(conn, coach_id, name, phone):
-    with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE Coaches SET CoachName=%s, Phone=%s WHERE CoachID=%s;",
-            (name, phone, coach_id)
-        )
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE Coaches SET CoachName=%s, Phone=%s WHERE CoachID=%s;",
+        (name, phone, coach_id)
+    )
+    cur.close()
     conn.commit()
 
 def delete_coach(conn, coach_id):
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM Coaches WHERE CoachID=%s;", (coach_id,))
+    cur = conn.cursor()
+    cur.execute("DELETE FROM Coaches WHERE CoachID=%s;", (coach_id,))
+    cur.close()
     conn.commit()
 
 # ── Validation ────────────────────────────────────────────────────────────────
