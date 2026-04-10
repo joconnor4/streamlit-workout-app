@@ -159,49 +159,47 @@ st.markdown(
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
-@st.cache_resource
 def get_connection():
     if "db_conn" not in st.session_state or st.session_state.db_conn.closed:
         st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
     else:
         try:
-            # ping the connection to make sure it's still alive
             st.session_state.db_conn.cursor().execute("SELECT 1")
         except Exception:
             st.session_state.db_conn = psycopg2.connect(st.secrets["DB_URL"])
     return st.session_state.db_conn
 
 
-def get_cursor(conn):
-    return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-
 def fetch_athletes(conn):
-    with get_cursor(conn) as cur:
-        cur.execute(
-            "SELECT AthleteID, AthleteName, Phone, BirthDate, GradYear "
-            "FROM Athletes ORDER BY AthleteName;"
-        )
-        return cur.fetchall()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT AthleteID, AthleteName, Phone, BirthDate, GradYear "
+        "FROM Athletes ORDER BY AthleteName;"
+    )
+    results = cur.fetchall()
+    cur.close()
+    return results
 
 
 def insert_athlete(conn, name, phone, birth, grad):
-    with get_cursor(conn) as cur:
-        cur.execute(
-            "INSERT INTO Athletes (AthleteName, Phone, BirthDate, GradYear) "
-            "VALUES (%s, %s, %s, %s);",
-            (name, phone, birth, grad),
-        )
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO Athletes (AthleteName, Phone, BirthDate, GradYear) "
+        "VALUES (%s, %s, %s, %s);",
+        (name, phone, birth, grad),
+    )
+    cur.close()
     conn.commit()
 
 
 def update_athlete(conn, aid, name, phone, birth, grad):
-    with get_cursor(conn) as cur:
-        cur.execute(
-            "UPDATE Athletes SET AthleteName=%s, Phone=%s, BirthDate=%s, GradYear=%s "
-            "WHERE AthleteID=%s;",
-            (name, phone, birth, grad, aid),
-        )
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE Athletes SET AthleteName=%s, Phone=%s, BirthDate=%s, GradYear=%s "
+        "WHERE AthleteID=%s;",
+        (name, phone, birth, grad, aid),
+    )
+    cur.close()
     conn.commit()
 
 
